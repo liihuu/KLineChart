@@ -17,10 +17,13 @@ import type Bounding from '../common/Bounding'
 import type { KLineData } from '../common/Data'
 import type Precision from '../common/Precision'
 import type Crosshair from '../common/Crosshair'
+import type {
+  CandleStyle, TooltipLegend, TooltipLegendChild,
+  CandleTooltipCustomCallbackData, CandleTooltipRectStyle,
+} from "../common/Styles";
 import {
-  type CandleStyle, type TooltipLegend, type TooltipLegendChild, TooltipShowType, CandleTooltipRectPosition,
-  type CandleTooltipCustomCallbackData, PolygonType
-} from '../common/Styles'
+  TooltipShowType, CandleTooltipRectPosition, PolygonType,
+} from "../common/Styles";
 import { formatPrecision } from '../common/utils/format'
 import { createFont } from '../common/utils/canvas'
 import { isFunction, isObject, isValid } from '../common/utils/typeChecks'
@@ -29,6 +32,7 @@ import { FormatDateType, type Options } from '../Options'
 
 import { PaneIdConstants } from '../pane/types'
 
+import type Coordinate from '../common/Coordinate'
 import type Indicator from '../component/Indicator'
 import { AxisPosition } from '../component/Axis'
 
@@ -55,6 +59,7 @@ export default class CandleTooltipView extends IndicatorTooltipView {
       const indicators = chartStore.getIndicatorsByPaneId(pane.getId())
       const candleStyles = options.styles.candle
       const indicatorStyles = options.styles.indicator
+      const tooltipRectStyles = candleStyles.tooltip.rect
       if (
         candleStyles.tooltip.showType === TooltipShowType.Rect &&
         indicatorStyles.tooltip.showType === TooltipShowType.Rect
@@ -76,12 +81,12 @@ export default class CandleTooltipView extends IndicatorTooltipView {
         const maxWidth = bounding.width - offsetRight
         const top = this._drawCandleStandardTooltip(
           ctx, dataList, paneId, crosshair, activeIcon, precision,
-          options, offsetLeft, offsetTop, maxWidth, candleStyles
+          options, offsetLeft, offsetTop, maxWidth, candleStyles, tooltipRectStyles
         )
         this.drawIndicatorTooltip(
           ctx, paneId, dataList, crosshair,
           activeIcon, indicators, options,
-          offsetLeft, top, maxWidth, indicatorStyles
+          offsetLeft, top, maxWidth, indicatorStyles, tooltipRectStyles
         )
       } else if (
         candleStyles.tooltip.showType === TooltipShowType.Rect &&
@@ -92,7 +97,7 @@ export default class CandleTooltipView extends IndicatorTooltipView {
         const top = this.drawIndicatorTooltip(
           ctx, paneId, dataList, crosshair,
           activeIcon, indicators, options,
-          offsetLeft, offsetTop, maxWidth, indicatorStyles
+          offsetLeft, offsetTop, maxWidth, indicatorStyles, tooltipRectStyles
         )
         const isDrawCandleTooltip = this.isDrawTooltip(crosshair, candleStyles.tooltip)
         this._drawRectTooltip(
@@ -105,7 +110,7 @@ export default class CandleTooltipView extends IndicatorTooltipView {
         const maxWidth = bounding.width - offsetRight
         const top = this._drawCandleStandardTooltip(
           ctx, dataList, paneId, crosshair, activeIcon, precision,
-          options, offsetLeft, offsetTop, maxWidth, candleStyles
+          options, offsetLeft, offsetTop, maxWidth, candleStyles, tooltipRectStyles
         )
         const isDrawIndicatorTooltip = this.isDrawTooltip(crosshair, indicatorStyles.tooltip)
         this._drawRectTooltip(
@@ -128,7 +133,8 @@ export default class CandleTooltipView extends IndicatorTooltipView {
     left: number,
     top: number,
     maxWidth: number,
-    styles: CandleStyle
+    styles: CandleStyle,
+    rectStyles: CandleTooltipRectStyle
   ): number {
     const tooltipStyles = styles.tooltip
     const tooltipTextStyles = tooltipStyles.text
@@ -143,27 +149,31 @@ export default class CandleTooltipView extends IndicatorTooltipView {
 
       const [leftIcons, middleIcons, rightIcons] = this.classifyTooltipIcons(tooltipStyles.icons)
 
-      prevRowHeight = this.drawStandardTooltipIcons(
-        ctx, activeTooltipIcon, leftIcons, coordinate,
-        paneId, '', left, prevRowHeight, maxWidth
+      const [measureResult, prevCalcHeight] = this.drawStandardTooltipRect(ctx, leftIcons, '', middleIcons, legends, rightIcons, coordinate, maxWidth, tooltipTextStyles, rectStyles)
+
+      this.drawStandardTooltipIcons(
+        ctx, activeTooltipIcon, leftIcons, 
+        paneId, '', measureResult[0] as Coordinate[]
       )
 
-      prevRowHeight = this.drawStandardTooltipIcons(
-        ctx, activeTooltipIcon, middleIcons, coordinate,
-        paneId, '', left, prevRowHeight, maxWidth
+      this.drawStandardTooltipIcons(
+        ctx, activeTooltipIcon, middleIcons,
+        paneId, '', measureResult[2] as Coordinate[]
       )
 
       if (legends.length > 0) {
-        prevRowHeight = this.drawStandardTooltipLegends(
-          ctx, legends, coordinate, left,
-          prevRowHeight, maxWidth, tooltipTextStyles
+         this.drawStandardTooltipLegends(
+          ctx, legends, tooltipTextStyles,
+          measureResult[3] as Array<[Coordinate, Coordinate]>
         )
       }
 
-      prevRowHeight = this.drawStandardTooltipIcons(
-        ctx, activeTooltipIcon, rightIcons, coordinate,
-        paneId, '', left, prevRowHeight, maxWidth
+      this.drawStandardTooltipIcons(
+        ctx, activeTooltipIcon, rightIcons,
+        paneId, '', measureResult[4] as Coordinate[]
       )
+
+      prevRowHeight = prevCalcHeight;
     }
     return coordinate.y + prevRowHeight
   }
